@@ -3,6 +3,13 @@ __pycache__/
 *.py[codz]
 *$py.class
 
+# output files
+output/
+src/precalc/
+datastream/ToN_IoT_Fog_dataset/
+datastream/ToN_IoT_Edge_dataset/
+data_src/ToN_IoT/
+
 # C extensions
 *.so
 
