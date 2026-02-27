@@ -1,4 +1,8 @@
 class params:
+    raw_dir = 'data_src/ToN_IoT/'
+    raw_edge = 'data_src/ToN_IoT/Processed_IoT_dataset/'
+    raw_linux = 'data_src/ToN_IoT/Processed_Linux_dataset/'
+    raw_windows = 'data_src/ToN_IoT/Processed_Windows_dataset/'
     fog_dir = 'datastream/ToN_IoT_Fog_dataset/'
     edge_dir = 'datastream/ToN_IoT_Edge_dataset/'
     saved_dir = 'src/saved_model/'
@@ -24,19 +28,19 @@ class params:
     edge_device_list = ['fridge', 'garage_door', 'modbus', 'motion_light', 'thermostat', 'weather']
     fog_device_list = ['linux', 'windows7', 'windows10']
     
-    npz_sources = {'fog': {'fridge': f'{fog_dir}fog_fridge.npz',
-                           'garage_door': f'{fog_dir}fog_garage_door.npz',
-                           'modbus': f'{fog_dir}fog_modbus.npz',
-                           'motion_light': f'{fog_dir}fog_motion_light.npz',
-                           'thermostat': f'{fog_dir}fog_thermostat.npz',
-                           'weather': f'{fog_dir}fog_weather.npz'},
-                    'edge': {'fridge': f'{edge_dir}Edge_IoT_Fridge.npz',
-                             'garage_door': f'{edge_dir}Edge_IoT_Garage_Door.npz',
-                             'modbus': f'{edge_dir}Edge_IoT_Modbus.npz',
-                             'motion_light': f'{edge_dir}Edge_IoT_Motion_Light.npz',
-                             'thermostat': f'{edge_dir}Edge_IoT_Thermostat.npz',
-                             'weather': f'{edge_dir}Edge_IoT_Weather.npz'}
-                    }
+    # npz_sources = {'fog': {'fridge': f'{fog_dir}fog_fridge.npz',
+    #                        'garage_door': f'{fog_dir}fog_garage_door.npz',
+    #                        'modbus': f'{fog_dir}fog_modbus.npz',
+    #                        'motion_light': f'{fog_dir}fog_motion_light.npz',
+    #                        'thermostat': f'{fog_dir}fog_thermostat.npz',
+    #                        'weather': f'{fog_dir}fog_weather.npz'},
+    #                 'edge': {'fridge': f'{edge_dir}Edge_IoT_Fridge.npz',
+    #                          'garage_door': f'{edge_dir}Edge_IoT_Garage_Door.npz',
+    #                          'modbus': f'{edge_dir}Edge_IoT_Modbus.npz',
+    #                          'motion_light': f'{edge_dir}Edge_IoT_Motion_Light.npz',
+    #                          'thermostat': f'{edge_dir}Edge_IoT_Thermostat.npz',
+    #                          'weather': f'{edge_dir}Edge_IoT_Weather.npz'}
+                    # }
     target_label = 'target'
     ts_label = 'ts'
     normal_label = 'normal'
