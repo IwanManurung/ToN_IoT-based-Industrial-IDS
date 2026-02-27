@@ -4,11 +4,14 @@ warnings.filterwarnings("ignore")
 from src import ICS_IIDS_Supervised
 import json
 import pandas as pd
+from base import params
 
-run_audited_version = True
-dev_under_test = 'fridge'
-class_under_test = 'normal'
-iids_layer = 'edge'
+def get_available_classes(dev):
+    src = params.csv_sources.get(dev)
+    gt = pd.read_csv(src)
+    return list(gt['target'].unique())
+    
+run_audited_version = False
 
 iids = ICS_IIDS_Supervised(
     classifier_models=['DynamicWeightedMajority', 'OzaBoost', 'HoeffdingAdaptiveTree'],
@@ -19,28 +22,35 @@ iids = ICS_IIDS_Supervised(
     run_audited_version=run_audited_version,
     audited_size=.1)
 
-iids_layer == 'edge'
-iids.Edge_Layer_IIDS(base_device=dev_under_test,
-                        all_in_fusion=True,
-                        prediction_class=class_under_test)
-# save model_output and metrics
-prefix = f'output/{iids_layer.title()}-IIDS_S2_{dev_under_test}_{class_under_test}'
+dev_list = params.edge_device_list
+excluded = ['fridge']
+remain = list(set(dev_list) - set(excluded))
 
-iids.model_output.to_csv(f'{prefix}.csv', sep=',', index=False)
-
-with open(f'{prefix}.json', 'w') as file:
-    json.dump(iids.metrics, file)
-del iids_layer, prefix
-
-iids_layer = 'fog'
-iids.Fog_Layer_IIDS(base_device=dev_under_test,
-                    prediction_class=class_under_test)
-    
-# save model_output and metrics
-prefix = f'output/{iids_layer.title()}-IIDS_S2_{dev_under_test}_{class_under_test}'
-
-iids.model_output.to_csv(f'{prefix}.csv', sep=',', index=False)
-
-with open(f'{prefix}.json', 'w') as file:
-    json.dump(iids.metrics, file)
-del iids_layer, prefix
+for dev_under_test in remain:
+    available_classes = get_available_classes(dev=dev_under_test)
+    for class_under_test in available_classes:
+        iids.Edge_Layer_IIDS(base_device=dev_under_test,
+                                all_in_fusion=True,
+                                prediction_class=class_under_test)
+        
+        prefix = f'output/Edge-IIDS_S2_{dev_under_test}_{class_under_test}'
+        
+        iids.model_output.to_csv(f'{prefix}.csv', sep=',', index=False)
+        
+        with open(f'{prefix}.json', 'w') as file:
+            json.dump(iids.metrics, file)
+        
+        del prefix
+        
+        iids.Fog_Layer_IIDS(base_device=dev_under_test,
+                            prediction_class=class_under_test)
+            
+        # save model_output and metrics
+        prefix = f'output/Fog-IIDS_S2_{dev_under_test}_{class_under_test}'
+        
+        iids.model_output.to_csv(f'{prefix}.csv', sep=',', index=False)
+        
+        with open(f'{prefix}.json', 'w') as file:
+            json.dump(iids.metrics, file)
+        
+        del prefix
