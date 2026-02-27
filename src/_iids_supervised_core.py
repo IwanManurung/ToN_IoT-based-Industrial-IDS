@@ -131,7 +131,6 @@ class iids_supervised_core:
                                                               scaler_model=self.scaler_model)
                 
                 dst = f"src/precalc/{self.layer}_{self.base_device}_{self.scaler_model}_{self.window_size}.npz"
-                print(dst)
                 np.savez(dst, scaled=self.feature, header=self.header)
                 print("Calc and saved scaled feature")
                 
