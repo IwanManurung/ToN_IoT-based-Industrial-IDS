@@ -18,7 +18,7 @@ class cleaning_edge_dataset:
     def __Edge_IoT_Fridge():
         name = "Fridge"
         src = [i for i in glob.glob(f'{params.raw_edge}*.csv') if name in i][0]
-        dst = f"{params.edge_dir}Edge_IoT_{name}.csv"
+        dst = params.csv_sources.get(name.lower())
         df = pd.read_csv(src, low_memory=False)
         df = df.dropna()
         df = df.drop(columns=['label'])
@@ -49,7 +49,7 @@ class cleaning_edge_dataset:
     def __Edge_IoT_Garage_Door():
         name = "Garage_Door"
         src = [i for i in glob.glob(f'{params.raw_edge}*.csv') if name in i][0]
-        dst = f"{params.edge_dir}Edge_IoT_{name}.csv"
+        dst = params.csv_sources.get(name.lower())
         df = pd.read_csv(src, low_memory=False)
         df = df.dropna()
         df = df.drop(columns=['label'])
@@ -87,7 +87,7 @@ class cleaning_edge_dataset:
     def __Edge_IoT_Modbus():
         name = "Modbus"
         src = [i for i in glob.glob(f'{params.raw_edge}*.csv') if name in i][0]
-        dst = f"{params.edge_dir}Edge_IoT_{name}.csv"
+        dst = params.csv_sources.get(name.lower())
         df = pd.read_csv(src, low_memory=False)
         df = df.drop(columns=['label'])
         df = df.rename(columns={'type': 'target'})
@@ -108,7 +108,7 @@ class cleaning_edge_dataset:
     def __Edge_IoT_Motion_Light():
         name = "Motion_Light"
         src = [i for i in glob.glob(f'{params.raw_edge}*.csv') if name in i][0]
-        dst = f"{params.edge_dir}Edge_IoT_{name}.csv"
+        dst = params.csv_sources.get(name.lower())
         df = pd.read_csv(src, low_memory=False)
         df = df.dropna()
         df = df.drop(columns=['label'])
@@ -139,7 +139,7 @@ class cleaning_edge_dataset:
     def __Edge_IoT_Thermostat():
         name = "Thermostat"
         src = [i for i in glob.glob(f'{params.raw_edge}*.csv') if name in i][0]
-        dst = f"{params.edge_dir}Edge_IoT_{name}.csv"
+        dst = params.csv_sources.get(name.lower())
         df = pd.read_csv(src, low_memory=False)
         df = df.dropna()
         df = df.drop(columns=['label'])
@@ -164,7 +164,7 @@ class cleaning_edge_dataset:
     def __Edge_IoT_Weather():
         name = "Weather"
         src = [i for i in glob.glob(f'{params.raw_edge}*.csv') if name in i][0]
-        dst = f"{params.edge_dir}Edge_IoT_{name}.csv"
+        dst = params.csv_sources.get(name.lower())
         df = pd.read_csv(src, low_memory=False)
         df = df.dropna()
         df = df.drop(columns=['label'])
