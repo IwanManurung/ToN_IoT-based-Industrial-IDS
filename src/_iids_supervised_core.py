@@ -32,23 +32,18 @@ class iids_supervised_core:
         else:
             return 0
 
-    def __save_scaled_feature(self):
-        dst = f"precalc/{self.layer}_{self.base_device}_{self.scaler_model}_{self.window_size}.npz"
-
-        np.savez(dst, scaled=self.feature, header=self.header)
-
     def __is_precalc_feature_exist(self):
-        dst = f"precalc/{self.layer}_{self.base_device}_{self.scaler_model}_{self.window_size}.npz"
-        return os.path.isfile(dst)
+        dst = f"src/precalc/{self.layer}_{self.base_device}_{self.scaler_model}_{self.window_size}.npz"
+        return os.path.exists(dst)
 
     def __load_from_precalc_scaled_feature(self):
-        dst = f"precalc/{self.layer}_{self.base_device}_{self.scaler_model}_{self.window_size}.npz"
+        dst = f"src/precalc/{self.layer}_{self.base_device}_{self.scaler_model}_{self.window_size}.npz"
         loaded = np.load(dst, allow_pickle=True)
         scaled = loaded.get('scaled')
         header = loaded.get('header')
         # consistency check
         if (len(scaled) == len(self.__feature)) & (len(set(header) - set(self.header)) == 0):
-            self.feature = scaled
+            return scaled
         
     def __load_configs(self, iids_configs):
         self.base_device = iids_configs.get("base_device")
@@ -128,13 +123,16 @@ class iids_supervised_core:
         if self.normalized:
             # Do online normalization to feature, bin by bin
             if self.__is_precalc_feature_exist():
-                self.__load_from_precalc_scaled_feature()
+                self.feature = self.__load_from_precalc_scaled_feature()
                 print("load from precalc")
             else:
                 self.feature = iids_util.online_normalization(data=self.__feature,
                                                               window_size=self.window_size,
                                                               scaler_model=self.scaler_model)
-                self.__save_scaled_feature()
+                
+                dst = f"src/precalc/{self.layer}_{self.base_device}_{self.scaler_model}_{self.window_size}.npz"
+                print(dst)
+                np.savez(dst, scaled=self.feature, header=self.header)
                 print("Calc and saved scaled feature")
                 
             util.nice_print(msg=f'. Proceeds Feature Normalization using sklearn {self.scaler_model} with Window size: {self.window_size}', align='left')
