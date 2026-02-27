@@ -2,6 +2,8 @@ from capymoa.stream import NumpyStream
 from . import iids_util
 from base import util
 import pandas as pd
+import numpy as np
+import os
 from typing import List, Dict, Union, Callable
 import time
 '''
@@ -30,6 +32,24 @@ class iids_supervised_core:
         else:
             return 0
 
+    def __save_scaled_feature(self):
+        dst = f"precalc/{self.layer}_{self.base_device}_{self.scaler_model}_{self.window_size}.npz"
+
+        np.savez(dst, scaled=self.feature, header=self.header)
+
+    def __is_precalc_feature_exist(self):
+        dst = f"precalc/{self.layer}_{self.base_device}_{self.scaler_model}_{self.window_size}.npz"
+        return os.path.isfile(dst)
+
+    def __load_from_precalc_scaled_feature(self):
+        dst = f"precalc/{self.layer}_{self.base_device}_{self.scaler_model}_{self.window_size}.npz"
+        loaded = np.load(dst, allow_pickle=True)
+        scaled = loaded.get('scaled')
+        header = loaded.get('header')
+        # consistency check
+        if (len(scaled) == len(self.__feature)) & (len(set(header) - set(self.header)) == 0):
+            self.feature = scaled
+        
     def __load_configs(self, iids_configs):
         self.base_device = iids_configs.get("base_device")
         self.all_in_fusion = iids_configs.get("all_in_fusion")
@@ -107,9 +127,16 @@ class iids_supervised_core:
         util.nice_print(msg=f"Step 4: Setup Normalization", align='left')
         if self.normalized:
             # Do online normalization to feature, bin by bin
-            self.feature = iids_util.online_normalization(data=self.__feature,
+            if self.__is_precalc_feature_exist():
+                self.__load_from_precalc_scaled_feature()
+                print("load from precalc")
+            else:
+                self.feature = iids_util.online_normalization(data=self.__feature,
                                                               window_size=self.window_size,
                                                               scaler_model=self.scaler_model)
+                self.__save_scaled_feature()
+                print("Calc and saved scaled feature")
+                
             util.nice_print(msg=f'. Proceeds Feature Normalization using sklearn {self.scaler_model} with Window size: {self.window_size}', align='left')
         else:
             # if Normalized is False, No changed to feature
