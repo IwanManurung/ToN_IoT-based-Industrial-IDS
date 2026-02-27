@@ -17,7 +17,7 @@ class cleaning_fog_dataset:
     def __Fog_Linux_Disk():
         src1 = f'{params.raw_linux}linux_disk_1.csv'
         src2 = f'{params.raw_linux}linux_disk_2.csv'
-        dst = f'{params.fog_dir}linux_disks_feature.csv'
+        dst = params.csv_sources.get('linux_disks')
         df1 = pd.read_csv(src1, low_memory=False)
         df1 = df1.drop(columns=['PID','CMD', 'label', 'type'])
         df1 = df1.drop_duplicates()
@@ -83,10 +83,11 @@ class cleaning_fog_dataset:
         print(msg)
         df.to_csv(dst, sep=',', index=False)
 
+    @staticmethod
     def __Fog_Linux_Memory():
         src1 = f'{params.raw_linux}linux_memory1.csv'
         src2 = f'{params.raw_linux}linux_memory2.csv'
-        dst = f'{params.fog_dir}linux_memory_feature.csv'
+        dst = params.csv_sources.get('linux_memory')
         df1 = pd.read_csv(src1, low_memory=False)
         df1 = df1.drop(columns=['PID','CMD', 'label', 'type'])
         df1 = df1.drop_duplicates()
@@ -130,10 +131,11 @@ class cleaning_fog_dataset:
         print(msg)
         df.to_csv(dst, sep=',', index=False)
 
+    @staticmethod
     def __Fog_Linux_Process():
         src1 = f'{params.raw_linux}Linux_process_1.csv'
         src2 = f'{params.raw_linux}Linux_process_2.csv'
-        dst = f'{params.fog_dir}linux_process_feature.csv'
+        dst = params.csv_sources.get('linux_process')
         df1 = pd.read_csv(src1, low_memory=False)
         df1 = df1.drop(columns=['PID','CMD', 'label', 'type'])
         df1 = df1.drop_duplicates()
@@ -153,6 +155,7 @@ class cleaning_fog_dataset:
         print(msg)
         df.to_csv(dst, sep=',', index=False)
 
+    @staticmethod
     def __Fog_Linux_Windows7():
         src = f'{params.raw_windows}windows7_dataset.csv'
         dst = f'{params.fog_dir}windows7.csv'
@@ -176,7 +179,8 @@ class cleaning_fog_dataset:
         print(msg)
 
         df.to_csv(dst, sep=',', index=False)
-    
+
+    @staticmethod
     def __Fog_Linux_Windows10():
         src = f'{params.raw_windows}windows10_dataset.csv'
         dst = f'{params.fog_dir}windows10.csv'
