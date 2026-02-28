@@ -55,7 +55,7 @@ class iids_delay_label_core:
         self.classifier_models = iids_configs.get("classifier_models")
         self.delayed_label = iids_configs.get("delayed_label")
         self.normalized = iids_configs.get("normalized")
-        self.low_memory = iids_configs.get("low_memory")
+        self.similarity_threshold = iids_configs.get("similarity_threshold")
         self.scaler_model = iids_configs.get("scaler_model")
         self.window_size = iids_configs.get("window_size")
         self.random_seed = iids_configs.get("random_seed")
@@ -72,14 +72,12 @@ class iids_delay_label_core:
                 all_in_fusion=self.all_in_fusion,
                 others=self.device_in_fusion,
                 load_all=not self.run_audited_version,
-                low_memory=self.low_memory,
                 sample_size=self.audited_size,
                 random_seed=self.random_seed)
         elif self.layer == 'fog':
             feature, target, header = iids_util.loading_fog_dataset(
                 base_device=self.base_device,
                 load_all=not self.run_audited_version,
-                low_memory=self.low_memory,
                 sample_size=self.audited_size,
                 random_seed=self.random_seed)
             
@@ -216,7 +214,7 @@ class iids_delay_label_core:
                     # print('curr',curr_instance.x)
                     # print('D',D_instance.x)
                     stream_similarity = cosine_similarity([curr_instance.x], [D_instance.x])[0][0]
-                    if stream_similarity > .99:
+                    if stream_similarity > self.similarity_threshold:
                         # if both stream highly similar, then let DelayLearner make the predictions
                         y_Dmodels = list(self.__Dpredict(curr_instance))
                         y_Imodels = y_Dmodels

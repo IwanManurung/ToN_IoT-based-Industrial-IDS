@@ -10,7 +10,7 @@ class ICS_IIDS_Delay_Label(iids_delay_label_core):
                  classifier_models: List[str] =['DynamicWeightedMajority', 'OzaBoost', 'HoeffdingAdaptiveTree'],
                  delayed_label: int=1_000,
                  normalized: bool =True,
-                #  low_memory: bool =False,
+                 similarity_threshold: float =.95,
                  scaler_model: Literal['StandardScaler', 'MinMaxScaler']='StandardScaler',
                  window_size: int =600,
                  random_seed: int =1,
@@ -26,7 +26,7 @@ class ICS_IIDS_Delay_Label(iids_delay_label_core):
         configs.update({"classifier_models": classifier_models})
         configs.update({"delayed_label": delayed_label})
         configs.update({"normalized": normalized})
-        # configs.update({"low_memory": low_memory})
+        configs.update({"similarity_threshold": similarity_threshold})
         configs.update({"scaler_model": scaler_model})
         configs.update({"window_size": window_size})
         configs.update({"random_seed": random_seed})
