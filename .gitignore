@@ -4,10 +4,14 @@ __pycache__/
 *$py.class
 
 # output files
-output/
+output/*.csv
+output/*.json
 src/precalc/
-datastream/ToN_IoT_Fog_dataset/
-datastream/ToN_IoT_Edge_dataset/
+datastream/ToN_IoT_Edge_dataset/*.csv
+datastream/ToN_IoT_Edge_dataset/*.npz
+datastream/ToN_IoT_Fog_dataset/*.csv
+datastream/ToN_IoT_Fog_dataset/*.npz
+
 data_src/ToN_IoT/
 
 # C extensions
