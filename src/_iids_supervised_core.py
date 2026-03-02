@@ -6,6 +6,8 @@ import numpy as np
 import os
 from typing import List, Dict, Union, Callable
 import time
+from itertools import combinations
+from sklearn.metrics import cohen_kappa_score
 '''
 ONE vs RestOfTheClass
 '''
@@ -172,15 +174,12 @@ class iids_supervised_core:
             curr_instance = self.stream.next_instance()
             # first, model to test the current instance
             y_models = list(self.__predictors(curr_instance))
-            
-            majority_class = self.evaluate_majority_class(y_index=curr_instance.y_index)
-            
-            y_predict = iids_util.voting_decision(npredicts=y_models,
-                                                  rep_NA=True,
-                                                  rep_NA_as=majority_class)
-            # y_models = output models, final decision, y_true
             # update y_models for evaluations. replaceNA with majority class
-            y_models = [majority_class if i == None else i for i in y_models]
+            majority_class = self.evaluate_majority_class(y_index=curr_instance.y_index)
+            y_models = [majority_class if item == None else item for item in y_models]
+            # final prediction
+            y_predict = iids_util.voting_decision(npredicts=y_models)
+            # y_models = output models, final decision, y_true
             output = y_models + [y_predict] + [curr_instance.y_index]
             model_output.append(output.copy())
             # then, model to train the current instance
@@ -197,16 +196,33 @@ class iids_supervised_core:
         util.nice_print(msg=f". Reviewing {instances_seen:,} were done", align='left')
         self.evaluator(model_output=model_output,
                        runtime=runtime)
+        util.print_dict(dicts=self.metrics, startswith="Evaluation Metrics: ", sort_value=False)
 
     def evaluator(self, model_output, runtime):
-        columns = ['classifier_1', 'classifier_2', 'classifier_3', 'y_predict', 'y_true']
+        columns = ['m1', 'm2', 'm3', 'y_predict', 'y_true']
+        new_metrics = {"overall": {},
+                       "by-model": {},
+                       "agreement": {}}
         table = pd.DataFrame(model_output, columns=columns)
-
-        metrics = iids_util.evaluation_metrics(y_true=table['y_true'].tolist(),
-                                               y_pred=table['y_predict'].tolist())
+        y_true = table['y_true'].tolist().copy()
+        y_pred = table['y_predict'].tolist().copy()
+        metrics = iids_util.evaluation_metrics(y_true=y_true, y_pred=y_pred)
         metrics.update({"runtime": runtime})
         metrics.update({"Instances_num": len(model_output)})
-
         self.metrics = metrics
-        self.model_output = table
-        util.print_dict(dicts=metrics, startswith="Evaluation Metrics: ")
+        # add overall metrics
+        new_metrics.update({"overall": metrics})
+        # add metrics per models
+        model_id = ['m1', 'm2', 'm3']
+        for col in model_id:
+            y_pred = table[col].tolist().copy()
+            metrics = iids_util.evaluation_metrics(y_true=y_true, y_pred=y_pred)
+            new_metrics.get("by-model").update({col: metrics})
+            del metrics, y_pred
+        # add agreement score between models
+        for x1,x2 in combinations(model_id, r=2):
+            y1 = table[x1].tolist().copy()
+            y2 = table[x2].tolist().copy()
+            score = cohen_kappa_score(y1=y1, y2=y2)
+            new_metrics.get('agreement').update({f"{x1}-{x2}": round(score,3)})
+        self.new_metrics = new_metrics

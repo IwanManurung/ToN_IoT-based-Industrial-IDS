@@ -7,6 +7,8 @@ from typing import List, Dict, Union, Callable
 from sklearn.metrics.pairwise import cosine_similarity
 import time
 import os
+from itertools import combinations
+from sklearn.metrics import cohen_kappa_score
 '''
 ONE vs RestOfTheClass
 '''
@@ -193,53 +195,51 @@ class iids_delay_label_core:
             try:
                 # first, InTimeLearner to run the test-then-train
                 y_Iproba = list(self.__Iproba(curr_instance))
+                # replace NA with zero if any
+                y_Iproba = [0 if item == None else item for item in y_Iproba]
                 y_Imodels = iids_util.proba_prediction_rules(nscore=y_Iproba,
                                                              threshold=self.proba_threshold)
                 # then, model to train the current instance
                 self.__Itrain(curr_instance)
                 Istream_seen += 1
                 if Istream_seen < self.delayed_label:
-                    # DelayLearner is in inactive state, no incoming label
-                    # then y_Dmodels is assumed identical with y_Imodels
+                    # DelayLearner is in inactive state, since no incoming label
+                    # then y_Dmodels is assumed to be identical with y_Imodels
                     y_Dmodels = y_Imodels
                     # update rolling majority class anomaly prediction
                     ipred = iids_util.voting_decision(npredicts=y_Imodels)
                     self.evaluate_majority_class(y_index=ipred)
                     del ipred
                 else:
-                    # DelayLearner is no active.
-                    # DelayLearner is able to proceed train-then-test procedure
+                    # DelayLearner is now active and will adopt train-then-test procedure
                     # First step, run DelayLearner to train DelayStream
                     # then calculate similarity between current Istream and current Dstream
                     D_instance = self.Dstream.next_instance()
                     self.__Dtrain(D_instance)
+                    # update rolling majority class with delayed label
+                    majority_class = self.evaluate_majority_class(y_index=D_instance.y_index)
                     # DelayLearner make the predictions
                     y_Dmodels = list(self.__Dpredict(curr_instance))
-                    # update rolling majority class with delayed label
-                    self.evaluate_majority_class(y_index=D_instance.y_index)
+                    # replaceNA with majority class if any
+                    y_Dmodels = [majority_class if item == None else item for item in y_Dmodels]
                     Dstream_seen += 1
+
                     stream_similarity = cosine_similarity([curr_instance.x], [D_instance.x])[0][0]
                     if stream_similarity > self.similarity_threshold:
                         # if both stream highly similar,
                         y_Imodels = y_Dmodels # discard prediction by anomaly models
+                # y_models were defined by both learner
+                y_models = y_Imodels + y_Dmodels
+                y_final = iids_util.voting_decision(y_models)
+                # Output table
+                output = y_models + [y_final] + [curr_instance.y_index]
+                model_output.append(output.copy())
+                # delete temporary variable to ensure no repeated value
+                del y_Imodels, y_Dmodels, output, y_models, y_final
             except:
                 # print(curr_instance)
                 pass
-            # get current rolling majority class
-            majority_class = self.evaluate_majority_class()
-            # y_models were defined by both learner
-            y_models = y_Imodels + y_Dmodels
-            y_final = iids_util.voting_decision(y_models,
-                                                rep_NA=True,
-                                                rep_NA_as=majority_class)
             
-            # Output table
-            y_models = [majority_class if item == None else item for item in y_models]
-            output = y_models + [y_final] + [curr_instance.y_index]
-            model_output.append(output.copy())
-            # delete temporary variable to ensure no repeated value
-            # del y_Imodels, y_Dmodels, output, y_models, y_final
-
             # print progress
             if (Istream_seen % 1000 == 0) or (self.Istream.has_more_instances() == False):
                 progress = Istream_seen/self.Istream._len
@@ -250,18 +250,33 @@ class iids_delay_label_core:
         util.nice_print(msg=f". Reviewing {Istream_seen:,} were done", align='left')
         self.evaluator(model_output=model_output,
                        runtime=runtime)
+        util.print_dict(dicts=self.metrics, startswith="Evaluation Metrics: ", sort_value=False)
 
     def evaluator(self, model_output, runtime):
-        columns = ['detector_1', 'detector_2', 'detector_3',
-                   'classifier_1', 'classifier_2', 'classifier_3',
-                   'y_predict', 'y_true']
+        columns = ['m1', 'm2', 'm3', 'm4', 'm5', 'm6', 'y_predict', 'y_true']
+        new_metrics = {"overall": {},
+                       "by-model": {},
+                       "agreement": {}}
         table = pd.DataFrame(model_output, columns=columns)
-
-        metrics = iids_util.evaluation_metrics(y_true=table['y_true'].tolist(),
-                                               y_pred=table['y_predict'].tolist())
+        y_true = table['y_true'].tolist().copy()
+        y_pred = table['y_predict'].tolist().copy()
+        metrics = iids_util.evaluation_metrics(y_true=y_true, y_pred=y_pred)
         metrics.update({"runtime": runtime})
         metrics.update({"Instances_num": len(model_output)})
-
         self.metrics = metrics
-        self.model_output = table
-        util.print_dict(dicts=metrics, startswith="Evaluation Metrics: ")
+        # add overall metrics
+        new_metrics.update({"overall": metrics})
+        # add metrics per models
+        model_id = ['m1', 'm2', 'm3', 'm4', 'm5', 'm6']
+        for col in model_id:
+            y_pred = table[col].tolist().copy()
+            metrics = iids_util.evaluation_metrics(y_true=y_true, y_pred=y_pred)
+            new_metrics.get("by-model").update({col: metrics})
+            del metrics, y_pred
+        # add agreement score between models
+        for x1,x2 in combinations(model_id, r=2):
+            y1 = table[x1].tolist().copy()
+            y2 = table[x2].tolist().copy()
+            score = cohen_kappa_score(y1=y1, y2=y2)
+            new_metrics.get('agreement').update({f"{x1}-{x2}": round(score,3)})
+        self.new_metrics = new_metrics

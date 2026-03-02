@@ -9,7 +9,7 @@ class ICS_IIDS_Delay_Label(iids_delay_label_core):
                  anomaly_models: List[str] =['HalfSpaceTrees', 'Autoencoder', 'AdaptiveIsolationForest'],
                  proba_threshold: float =.5,
                  classifier_models: List[str] =['DynamicWeightedMajority', 'OzaBoost', 'HoeffdingAdaptiveTree'],
-                 delayed_label: int=1_000,
+                 delayed_label: int=300,
                  normalized: bool =True,
                  similarity_threshold: float =.95,
                  scaler_model: Literal['StandardScaler', 'MinMaxScaler']='StandardScaler',
