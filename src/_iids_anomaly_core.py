@@ -40,7 +40,6 @@ class iids_anomaly_core:
         self.anomaly_models = iids_configs.get("anomaly_models")
         self.proba_threshold = iids_configs.get("proba_threshold")
         self.normalized = iids_configs.get("normalized")
-        # self.low_memory = iids_configs.get("low_memory")
         self.scaler_model = iids_configs.get("scaler_model")
         self.window_size = iids_configs.get("window_size")
         self.random_seed = iids_configs.get("random_seed")
@@ -170,7 +169,7 @@ class iids_anomaly_core:
                 y_predict = iids_util.voting_decision(npredicts=y_models,
                                                     rep_NA=False)
                 # y_models = output models, final decision, y_true
-                output = proba_score + [y_predict] + [curr_instance.y_index]
+                output = np.round(proba_score, 2) + [y_predict] + [curr_instance.y_index]
                 model_output.append(output.copy())
                 # then, model to train the current instance
                 self.__trainers(curr_instance)

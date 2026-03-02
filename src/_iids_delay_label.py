@@ -7,6 +7,7 @@ class ICS_IIDS_Delay_Label(iids_delay_label_core):
 
     def __init__(self,
                  anomaly_models: List[str] =['HalfSpaceTrees', 'Autoencoder', 'AdaptiveIsolationForest'],
+                 proba_threshold: float =.5,
                  classifier_models: List[str] =['DynamicWeightedMajority', 'OzaBoost', 'HoeffdingAdaptiveTree'],
                  delayed_label: int=1_000,
                  normalized: bool =True,
@@ -23,6 +24,7 @@ class ICS_IIDS_Delay_Label(iids_delay_label_core):
         
         configs = {}
         configs.update({"anomaly_models": anomaly_models})
+        configs.update({"proba_threshold": proba_threshold})
         configs.update({"classifier_models": classifier_models})
         configs.update({"delayed_label": delayed_label})
         configs.update({"normalized": normalized})

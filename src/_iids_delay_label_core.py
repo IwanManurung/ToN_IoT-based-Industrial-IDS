@@ -52,6 +52,7 @@ class iids_delay_label_core:
         self.device_in_fusion = iids_configs.get("device_in_fusion")
         self.layer = iids_configs.get("layer")
         self.anomaly_models = iids_configs.get("anomaly_models")
+        self.proba_threshold = iids_configs.get("proba_threshold")
         self.classifier_models = iids_configs.get("classifier_models")
         self.delayed_label = iids_configs.get("delayed_label")
         self.normalized = iids_configs.get("normalized")
@@ -190,46 +191,40 @@ class iids_delay_label_core:
             curr_instance = self.Istream.next_instance()
             # If delayed label did not exist, run IIDS with anomaly models only
             try:
+                # first, InTimeLearner to run the test-then-train
+                y_Iproba = list(self.__Iproba(curr_instance))
+                y_Imodels = iids_util.proba_prediction_rules(nscore=y_Iproba,
+                                                             threshold=self.proba_threshold)
+                # then, model to train the current instance
+                self.__Itrain(curr_instance)
+                Istream_seen += 1
                 if Istream_seen < self.delayed_label:
-                    # first, InTimeLearner to run the test-then-train
-                    y_Iproba = list(self.__Iproba(curr_instance))
-                    y_Imodels = iids_util.proba_prediction_rules(nscore=y_Iproba)
-                    # Since DelayLearner is inactive, y_models was defined only by InTimeLearner
+                    # DelayLearner is in inactive state, no incoming label
+                    # then y_Dmodels is assumed identical with y_Imodels
                     y_Dmodels = y_Imodels
-                    # then, model to train the current instance
-                    self.__Itrain(curr_instance)
-                    # Decision on anomaly models
-                    yI_predict = iids_util.voting_decision(y_Imodels,
-                                                    rep_NA=False)
-                    # update rolling majority class with yO_predict
-                    self.evaluate_majority_class(y_index=yI_predict)
+                    # update rolling majority class anomaly prediction
+                    ipred = iids_util.voting_decision(npredicts=y_Imodels)
+                    self.evaluate_majority_class(y_index=ipred)
+                    del ipred
                 else:
-                    # DelayLearner is active. DelayLearner able to use train-then-test procedure
+                    # DelayLearner is no active.
+                    # DelayLearner is able to proceed train-then-test procedure
                     # First step, run DelayLearner to train DelayStream
                     # then calculate similarity between current Istream and current Dstream
                     D_instance = self.Dstream.next_instance()
                     self.__Dtrain(D_instance)
+                    # DelayLearner make the predictions
+                    y_Dmodels = list(self.__Dpredict(curr_instance))
                     # update rolling majority class with delayed label
                     self.evaluate_majority_class(y_index=D_instance.y_index)
-                    # print('curr',curr_instance.x)
-                    # print('D',D_instance.x)
+                    Dstream_seen += 1
                     stream_similarity = cosine_similarity([curr_instance.x], [D_instance.x])[0][0]
                     if stream_similarity > self.similarity_threshold:
-                        # if both stream highly similar, then let DelayLearner make the predictions
-                        y_Dmodels = list(self.__Dpredict(curr_instance))
-                        y_Imodels = y_Dmodels
-                    else:
-                        # else, let both learner make the predictions
-                        y_Iproba = list(self.__Iproba(curr_instance))
-                        self.__Itrain(curr_instance)
-                        y_Imodels = iids_util.proba_prediction_rules(nscore=y_Iproba)
-                        y_Dmodels = list(self.__Dpredict(curr_instance))
-                    Dstream_seen += 1
-                Istream_seen += 1
+                        # if both stream highly similar,
+                        y_Imodels = y_Dmodels # discard prediction by anomaly models
             except:
                 # print(curr_instance)
                 pass
-            
             # get current rolling majority class
             majority_class = self.evaluate_majority_class()
             # y_models were defined by both learner
@@ -238,7 +233,8 @@ class iids_delay_label_core:
                                                 rep_NA=True,
                                                 rep_NA_as=majority_class)
             
-            # Output table 
+            # Output table
+            y_models = [majority_class if item == None else item for item in y_models]
             output = y_models + [y_final] + [curr_instance.y_index]
             model_output.append(output.copy())
             # delete temporary variable to ensure no repeated value
@@ -256,8 +252,8 @@ class iids_delay_label_core:
                        runtime=runtime)
 
     def evaluator(self, model_output, runtime):
-        columns = ['detector1', 'detector2', 'detector3',
-                   'classifier1', 'classifier2', 'classifier3',
+        columns = ['detector_1', 'detector_2', 'detector_3',
+                   'classifier_1', 'classifier_2', 'classifier_3',
                    'y_predict', 'y_true']
         table = pd.DataFrame(model_output, columns=columns)
 

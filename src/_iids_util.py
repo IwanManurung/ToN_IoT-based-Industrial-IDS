@@ -29,7 +29,7 @@ class iids_util:
         # Decision rules for multi anomaly detectors
         # Higher score is indicative of Anomaly or Class_1 wins
         assert (threshold > 0.0) & (threshold < 1.0)
-        npredicts = [int(score > threshold) for score in nscore]
+        npredicts = [1 if score > threshold else 0 for score in nscore]
         return npredicts
         
     @staticmethod
