@@ -6,7 +6,7 @@ __pycache__/
 # output files
 output/*.csv
 output/*.json
-src/precalc/
+src/precalc/*
 datastream/ToN_IoT_Edge_dataset/*.csv
 datastream/ToN_IoT_Edge_dataset/*.npz
 datastream/ToN_IoT_Fog_dataset/*.csv
