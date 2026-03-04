@@ -1,4 +1,4 @@
-from base import params
+# from base import params
 import numpy as np
 import pandas as pd
 from typing import List, Dict, Callable, Literal
@@ -22,13 +22,18 @@ class iids_util:
             return 1
         else:
             return 0
-    
+    @staticmethod
+    def proba_rules(nscore: List[float]):
+        # replace None with .5 or perfect uncertainty
+        nscore = [.5 if item == None else item for item in nscore]
+        return nscore
+
     @staticmethod
     def proba_prediction_rules(nscore: List[float],
-                      threshold: float=.5) -> int:
+                      threshold: float) -> int:
         # Decision rules for multi anomaly detectors
         # Higher score is indicative of Anomaly or Class_1 wins
-        assert (threshold > 0.0) & (threshold < 1.0)
+        assert (threshold >= 0.0) & (threshold <= 1.0)
         npredicts = [1 if score > threshold else 0 for score in nscore]
         return npredicts
         
@@ -297,12 +302,12 @@ class iids_util:
         precision = precision_score(y_true=y_true, y_pred=y_pred)
         recall = recall_score(y_true=y_true, y_pred=y_pred)
 
-        rounding = lambda x : round(100 * x, 3)
+        rounding = lambda x : round(100 * x, 4)
 
         metrics = {'Accuracy': rounding(acc),
-                   'Kappa': round(kappa,2),
+                   'Kappa': round(kappa,4),
                    'F1 score': rounding(f1),
-                   'MCC': round(mcc,2),
+                   'MCC': round(mcc,4),
                    'Precision': rounding(precision),
                    'Recall': rounding(recall)
                    }

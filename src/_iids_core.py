@@ -1,284 +1,467 @@
-from capymoa.stream import NumpyStream
-from . import iids_base
-from sklearn.metrics import (accuracy_score, cohen_kappa_score, f1_score,
-                             matthews_corrcoef, precision_score, recall_score)
+from . import iids_util
 from base import util
 import pandas as pd
 import numpy as np
-from sklearn.preprocessing import (StandardScaler, LabelEncoder, MinMaxScaler)
-from itertools import pairwise
+import os
 import time
-# import json
-from base import params
-from datastream import fusion_engine
 from typing import List, Dict, Union, Callable
+# import time
+from itertools import combinations
+from sklearn.metrics import cohen_kappa_score
+from sklearn.metrics.pairwise import cosine_similarity
 
 class iids_core:
     def __init__(self,
-                 iids_configs: Dict[str, Union[List[str], str, float, int]]) -> None:
-        self.__load_iids_config(iids_configs=iids_configs)
-        self.__waiting_time = 0
-        self.__make_stream_pipeline()
-        self.__make_learner_pipeline()
-        self.__ocl_pipeline()
+                 iids_configs: Dict):
+        self.__load_configs(iids_configs=iids_configs)
+        self.__make_dataset()
+        self.__feature_normalization()
+        pass
     
-    @staticmethod
-    def __encoding_target_label(ntarget: List[str]) -> Union[List[int], Dict[str, int]]:
-        # encoding target and save the encoding rules
-        le = LabelEncoder()
-        encoded_target = le.fit_transform(ntarget)
-        encoding_rules = {}
-        [encoding_rules.update({i: int(le.transform([i])[0])}) for i in set(ntarget)]
-        return encoded_target, encoding_rules
+    @property
+    def base_device(self):
+        return self.__base_device
+    
+    @property
+    def all_in_fusion(self):
+        return self.__all_in_fusion
+    
+    @property
+    def device_in_fusion(self):
+        return self.__device_in_fusion
+    
+    @property
+    def layer(self):
+        return self.__layer
+    
+    @property
+    def prediction_class(self):
+        return self.__prediction_class
+    
+    @property
+    def anomaly_models(self):
+        return self.__anomaly_models
+    
+    @property
+    def classifier_models(self):
+        return self.__classifier_models
+    
+    @property
+    def classifier_models(self):
+        return self.__classifier_models
+    
+    @property
+    def proba_threshold(self):
+        return self.__proba_threshold
+    
+    @property
+    def similarity_threshold(self):
+        return self.__similarity_threshold
+    
+    @property
+    def annot_delay(self):
+        return self.__annot_delay
+    
+    @property
+    def normalized(self):
+        return self.__normalized
+    
+    @property
+    def scaler_model(self):
+        return self.__scaler_model
+    
+    @property
+    def scaler_model(self):
+        return self.__scaler_model
+    
+    @property
+    def window_size(self):
+        return self.__window_size
+    
+    @property
+    def random_seed(self):
+        return self.__random_seed
+        
+    @property
+    def run_audited_version(self):
+        return self.__run_audited_version
 
-    @staticmethod
-    def __target_distribution(nlist: List) -> Dict[str, float]:
-        dist_percent = {}
-        for _ in set(nlist):
-            rasio = round(100 * nlist.count(_) / len(nlist), 3)
-            dist_percent.update({_: rasio})
-        return dist_percent
+    @property
+    def audited_size(self):
+        return self.__audited_size
     
-    @staticmethod
-    def __load_scaler_model(model: str ='StandardScaler') -> Callable:
-        if model.lower() == 'MinMaxScaler'.lower():
-            scaler = MinMaxScaler()
+    @property
+    def header(self):
+        return self.__header
+    
+    @property
+    def feature(self):
+        return self.__feature
+    
+    @property
+    def target(self):
+        return self.__target
+    
+    @property
+    def available_prediction_class(self):
+        return list(set(self.target))
+    
+    @property
+    def __precalc_feature_file(self):
+        file = f"src/precalc/{self.layer}_{self.base_device}_{self.scaler_model}_{self.window_size}.npz"
+        return file
+    
+    @property
+    def __make_precalc_scaled_feature(self):
+        dst = self.__precalc_feature_file
+        check1 = False
+        check2 = False
+        if os.path.exists(dst):
+            loaded = np.load(dst, allow_pickle=True)
+            scaled = loaded.get('scaled')
+            header = loaded.get('header')
+            # consistency check
+            check1 = scaled.shape == self.__feature.shape
+            check2 = len(set(header) - set(self.header)) == 0
+        
+        if check1 & check2:
+            return scaled
         else:
-            scaler = StandardScaler()
-        return scaler
-    
-    @staticmethod
-    def __data_windowing(nlist: List,
-                         window_size: int) -> List:
-        bin_range = list(range(0, len(nlist), int(window_size)))
-        bin_range.append(len(nlist))
-        bin = list(pairwise(bin_range))
-        bins = [nlist[start:end] for start,end in bin]
-        return bins
-    
-    @staticmethod
-    def __binary_evaluator(y_true: List,
-                           y_pred: List) -> Dict[str, float]:
-        assert len(y_true) == len(y_pred), 'length of y_true must same as y_pred'
-        assert sorted(set(y_true)) == sorted(set(y_true)), 'Unique items in y_true must same as y_pred'
-        # list of evaluation metrics
-        acc = accuracy_score(y_true=y_true, y_pred=y_pred)
-        kappa = cohen_kappa_score(y1=y_true,y2=y_pred)
-        f1 = f1_score(y_true=y_true, y_pred=y_pred)
-        mcc = matthews_corrcoef(y_true=y_true, y_pred=y_pred)
-        precision = precision_score(y_true=y_true, y_pred=y_pred)
-        recall = recall_score(y_true=y_true, y_pred=y_pred)
+            scaled = iids_util.online_normalization(data=self.feature,
+                                                    window_size=self.window_size,
+                                                    scaler_model=self.scaler_model)
+                
+            np.savez(self.__precalc_feature_file,
+                     scaled=scaled,
+                     header=self.header)
+            return scaled
 
-        rounding = lambda x : round(100 * x, 2)
+    def __load_configs(self, iids_configs):
+        self.__base_device = iids_configs.get("base_device")
+        self.__all_in_fusion = iids_configs.get("all_in_fusion")
+        self.__device_in_fusion = iids_configs.get("device_in_fusion")
+        self.__layer = iids_configs.get("layer")
+        self.__prediction_class = iids_configs.get("prediction_class")
+        self.__anomaly_models = iids_configs.get("anomaly_models")
+        self.__classifier_models = iids_configs.get("classifier_models")
+        self.__proba_threshold = iids_configs.get("proba_threshold")
+        self.__similarity_threshold = iids_configs.get("similarity_threshold")
+        self.__annot_delay = iids_configs.get("annot_delay")
+        self.__normalized = iids_configs.get("normalized")
+        self.__scaler_model = iids_configs.get("scaler_model")
+        self.__window_size = iids_configs.get("window_size")
+        self.__random_seed = iids_configs.get("random_seed")
+        self.__low_memory = iids_configs.get("low_memory")
+        self.__run_audited_version = iids_configs.get("run_audited_version")
+        self.__audited_size = iids_configs.get("audited_size")
 
-        binary_evaluator = {'accuracy': rounding(acc),
-                            'kappa': rounding(kappa),
-                            'f1_score': rounding(f1),
-                            'matthews_corrcoef': rounding(mcc),
-                            'precision_score': rounding(precision),
-                            'recall_score': rounding(recall)
-                            }
-        return binary_evaluator
-
-    @staticmethod
-    def __multiclass_evaluator(y_true: List,
-                               y_pred: List,
-                               encoding_rules: Dict[str, int]) -> Dict[str, Dict[str, float]]:
-        assert len(y_true) == len(y_pred), 'length of y_true must same as y_pred'
-        # list of metrics inherit from Binary Evaluator
-        unique_true = list(set(y_true))
-        # map 0 if 
-        per_state_eval = {}
-        attack_map = lambda attack_state, output: 1 if attack_state == output else 0
-        for state in unique_true:
-            state_true = [attack_map(state, i) for i in y_true]
-            state_predict = [attack_map(state, i) for i in y_pred]
-            state_eval = iids_core.__binary_evaluator(y_true=state_true, y_pred=state_predict)
-            att_type = [key for key,val in encoding_rules.items() if val == state][0]
-            per_state_eval.update({f'{state} {att_type.upper()}': state_eval})
-            del state_true, state_predict, state_eval
-        return per_state_eval
-    
-    @staticmethod
-    def __voting_rules(npredicts: List,
-                       encoded_normal: int,
-                       random_seed: int) -> int:
-        # npredicts = np.array(list(npredicts))
-        # replace None with params.rep_None
-        npredicts = np.array(list(map(lambda x: x if x != None else params.rep_None, npredicts)))
-        npredicts.sort()
-        # first, solve NA in prediction
-        # if all None, then all prediction is assumed to be Normal
-        while params.rep_None in npredicts:
-            # if all predictor predict None, assumed as normal
-            if npredicts[2] == params.rep_None:
-                npredicts[npredicts == params.rep_None] = encoded_normal
-            # if predictor2 predict None, assumed as predictor3
-            elif npredicts[1] == params.rep_None:
-                npredicts.put(1, npredicts[2])
-            # if predictor1 predict None, it will choose randomly from predictor2 and predictor3
-            elif npredicts[0] == params.rep_None:
-                rand_gen = np.random.default_rng(random_seed)
-                choosen = rand_gen.choice(list(npredicts[1:]), size=1)
-                npredicts.put(0, choosen)
-                del choosen 
-            npredicts.sort()
-        if len(set(npredicts)) == len(npredicts):
-            rand_gen = np.random.default_rng(random_seed)
-            y_final = rand_gen.choice(npredicts, size=1)
-        else:
-            npredicts = list(npredicts)
-            y_final = [x for x in set(npredicts) if npredicts.count(x) >= 2]
-        return y_final[0]
-
-    def __load_iids_config(self,
-                           iids_configs: Dict[str, Union[List, int, float, str]]):
-        self.base_device = iids_configs.get('base_device')
-        self.device_in_fusion = iids_configs.get('device_in_fusion')
-        self.layer = iids_configs.get('layer')
-        self.iids_model = iids_configs.get('iids_model')
-        if self.iids_model == 'AnomalyModel':
-            self.learning_models = iids_configs.get('anomaly_models')
-        elif self.iids_model == 'ClassifierModel':
-            self.learning_models = iids_configs.get('classifier_models')
-        self.detection_class = iids_configs.get('detection_class')
-        self.normalized = iids_configs.get('normalized')
-        self.scaler_model = iids_configs.get('scaler_model')
-        self.window_size = iids_configs.get('window_size')
-        self.random_seed = iids_configs.get('random_seed')
-        self.run_audited_version = iids_configs.get('run_audited_version')
-        self.sample_size = iids_configs.get('sample_size')
-
-    def __evaluator(self,
-                    model_output: List[List[int]],
-                    encoded_normal: int) -> None:
-        # set 0 for normal and 1 for others
-        colname = ['ym1','ym2','ym3','y_predict', 'y_index']
-        table = pd.DataFrame(np.array(model_output), columns=colname)
-        table = table.fillna(params.rep_None)
-        table['count'] = 1
-        dist_truth = table.groupby(colname).count().reset_index()
-        dist_truth.to_csv(params.saved_truth_table, sep=';', index=False)
-
-        # Binary Evaluation
-        y_index = [iids_base.binary_map_eval(y=i, normal_state=encoded_normal) for i in table['y_index'].tolist()]
-        y_predict = [iids_base.binary_map_eval(y=i, normal_state=encoded_normal) for i in table['y_predict'].tolist()]
-        binary_evaluator = iids_core.__binary_evaluator(y_true=y_index, y_pred=y_predict)
-        util.print_dict(binary_evaluator, startswith='Binary Evaluation Metrics:', sort_value=False)
-        print('\n')
-
-        # Multiclasses Evaluation
-        per_state_eval = self.__multiclass_evaluator(y_true = table['y_index'].tolist(),
-                                                     y_pred = table['y_predict'].tolist(),
-                                                     encoding_rules=self.encoding_rules)
-        util.print_dict(per_state_eval, startswith='Multiclasses Evaluation Metrics:', sort_value=False)
-        # # using MOA Evaluator
-        # [self.moa_evaluator.update(act, pred) for act,pred in zip(y_index, y_predict)]
-
-    def __make_stream_pipeline(self):
-        # Fusion only works in Edge
+    def __make_dataset(self):
         # Step 1: Loading and formatting the relevant dataset
-        # For auditing purpose, not all of the dataset must be reviewed
-        # We assume the sample for auditing also randomly choosen
-        # Auditing purpose should not be used for examining the models or IIDS
-        # This solely designed to review the pipeline and runtime
-        fs = fusion_engine(base_device = self.base_device,
-                                                layer=self.layer,
-                                                others=self.device_in_fusion,
-                                                load_all=not self.run_audited_version,
-                                                sample_size=self.sample_size,
-                                                random_seed=self.random_seed)
-        feature = fs.feature.copy()
-        self.header = fs.header.copy()
-        if self.detection_class == 'multiclass':
-            target = fs.target.copy()
+        util.nice_print(msg=f"Step 1: Preparing dataset", align='left')
+        if self.layer == 'edge':
+            feature, target, header = iids_util.loading_edge_dataset(
+                base_device=self.base_device,
+                all_in_fusion=self.all_in_fusion,
+                others=self.device_in_fusion,
+                load_all=not self.run_audited_version,
+                sample_size=self.audited_size,
+                random_seed=self.random_seed)
+        elif self.layer == 'fog':
+            feature, target, header = iids_util.loading_fog_dataset(
+                base_device=self.base_device,
+                load_all=not self.run_audited_version,
+                sample_size=self.audited_size,
+                random_seed=self.random_seed)
+        if self.__low_memory:
+            feat_df = pd.DataFrame(feature, columns=header)
+            for col in feat_df:
+                absmax = np.abs(feat_df[col].tolist()).max()
+                if absmax > 1_000:
+                    feat_df[col] = np.divide(feat_df[col].tolist(), 1_000)
+                feat_df[col] = feat_df[col].astype(np.float16)
+            self.__feature = feat_df.to_numpy(dtype=np.float16).copy()
+            del feat_df
+            self.__target = target
+            self.__header = header
         else:
-            target = iids_base.map_binary_label(ntarget=fs.target.copy())
-
-        if self.run_audited_version:
-            iids_base.print_step(step=0, input=[f'{len(target):,}'])
-        
-        # Encoding the target label into numeric representation
-        self.encoded_target, self.encoding_rules = self.__encoding_target_label(ntarget=target)
-        # printing running text info
-        iids_base.print_step(step=1)
-        time.sleep(self.__waiting_time)
-
-        # Step 2: Normalized data if required so
-        if self.normalized: 
-            scaler = iids_core.__load_scaler_model()
-        # printing running text info
-        iids_base.print_step(step=2)
-        time.sleep(self.__waiting_time)
-
-        # # Step 3: Split dataset into bins, number of instances per bin == window_size
+            self.__feature = feature
+            self.__target = target
+            self.__header = header
+    
+    @property
+    def label_distribution(self):
+        return self.__label_dist
+    
+    @property
+    def encoded_target(self):
+        return self.__encoded_target
+    
+    def __feature_normalization(self):
         if self.normalized:
-            feature_bin = self.__data_windowing(nlist=feature, window_size=self.window_size)
-            scaler.partial_fit(feature_bin[0])
-            streamed_ready = scaler.transform(feature_bin[0])
-            for bin in feature_bin[1:]:
-                scaler.partial_fit(bin)
-                new_add = scaler.transform(bin)
-                streamed_ready = np.append(streamed_ready, new_add, axis=0)
-            # printing running text info
-            iids_base.print_step(step=3, input=[f'{len(feature_bin):,}'])
-            time.sleep(self.__waiting_time)
+            # Check if precalculated normalized exists, if no, make one
+            self.__feature = self.__make_precalc_scaled_feature       
         else:
-            streamed_ready = feature.copy()
-            # printing running text info
-            iids_base.print_step(step=3, input=[f'{len(feature_bin):,}'])
-            time.sleep(self.__waiting_time)
-        
-        # Step 4: Preparing dataset as online streaming data
-        self.__stream = NumpyStream(X=streamed_ready,
-                             y=self.encoded_target)
-        iids_base.print_step(step=4)
-        time.sleep(self.__waiting_time)
-        
-    def __make_learner_pipeline(self):
-        # Step 5: Setting up learning models
-        learner_1, learner_2, learner_3 = iids_base.setup_learning_models(iids_model=self.iids_model,
-                                                                        stream=self.__stream,
-                                                                        models=self.learning_models,
-                                                                        random_seed=self.random_seed)
-        self.multi_predict = lambda ins: (learner_1.predict(ins), learner_2.predict(ins), learner_3.predict(ins))
-        self.multi_train = lambda ins: (learner_1.train(ins), learner_2.train(ins), learner_3.train(ins))
+            # if Normalized is False, No changed to feature
+            pass
+            util.nice_print(msg=f'. Proceeds Using Raw Feature', align='left')
 
-        iids_base.print_step(step=5)
-        time.sleep(self.__waiting_time)
-        util.print_list(nlist=self.header, startswith='Feature names:', style='upper')
-        self.target_distribution = self.__target_distribution(nlist=self.target)
-        util.print_dict(dicts=self.target_distribution, startswith='Target Distribution (%): ', sort_value=True)
-        util.nice_print('')
+    def __make_stream(self):
+        from capymoa.stream import NumpyStream
+        encoded_target = iids_util.map_as_binary_class(ntarget=self.__target,
+                                                       class_0=self.prediction_class)
+        self.__encoded_target = encoded_target
 
-        # Step 6: Starting up test-then-train
-    def __ocl_pipeline(self):
-        iids_base.print_step(step=6)
-        time.sleep(self.__waiting_time)
+        class0 = round(self.__target.count(self.prediction_class) / len(self.__target), 2)
+        class1 = 1 - class0
+
+        self.__label_dist = {self.prediction_class: class0,
+                             f"NOT-{self.prediction_class}": class1}
+        
+        self.Istream = NumpyStream(X=self.__feature,
+                                   y=encoded_target)
+        self.Dstream = NumpyStream(X=self.__feature,
+                                   y=encoded_target)
+
+    def __make_learning_pipeline(self):
+        # Setup 6: Setup Anomaly and Classifier models
+        detector_1, detector_2, detector_3 = iids_util.setup_learning_models(iids_model="AnomalyModel",
+                                                                             stream=self.Istream,
+                                                                             models=self.anomaly_models,
+                                                                             random_seed=self.random_seed)
+        # InTimeLearner: Ipredict and Itrain represent Online Anomaly Detector
+        self.__Iproba = lambda ins: (detector_1.score_instance(ins), detector_2.score_instance(ins), detector_3.score_instance(ins))
+        self.__Itrain = lambda ins: (detector_1.train(ins), detector_2.train(ins), detector_3.train(ins))
+        util.print_list(nlist=self.anomaly_models, startswith='.. Loaded Anomaly models:')
+
+        classifier_1, classifier_2, classifier_3 = iids_util.setup_learning_models(iids_model="ClassifierModel",
+                                                                             stream=self.Dstream,
+                                                                             models=self.classifier_models,
+                                                                             random_seed=self.random_seed)
+        # DelayLearner: Dpredict and Dtrain represent Delayed Classifier
+        self.__Dpredict = lambda ins: (classifier_1.predict(ins), classifier_2.predict(ins), classifier_3.predict(ins))
+        self.__Dtrain = lambda ins: (classifier_1.train(ins), classifier_2.train(ins), classifier_3.train(ins))
+        util.print_list(nlist=self.classifier_models, startswith='.. Loaded Classifier models:')
+
+    def run_ocl(self,
+                scenario):
+        self.__make_stream()
+        self.__make_learning_pipeline()
+        if scenario == 1:
+            self.__ocl_anomaly()
+        elif scenario == 2:
+            self.__ocl_supervised()
+        elif scenario == 3:
+            self.__ocl_semi_supervised()
+
+    @property
+    def metric_dicts(self):
+        return self.__metric_dicts
+    
+    def __evaluator(self, model_output, runtime):
+        self.__reset_evaluator()
+
+        if len(model_output[0]) == 5:
+            model_id = ['m1', 'm2', 'm3'] 
+        elif len(model_output[0]) == 8:
+            model_id = ['m1', 'm2', 'm3', 'm4', 'm5', 'm6']
+
+        columns = model_id + ['y_predict', 'y_true']
+
+        metric_dicts = {"overall": {},
+                       "by-model": {},
+                       "agreement": {}}
+        
+        table = pd.DataFrame(model_output, columns=columns)
+        y_true = table['y_true'].tolist().copy()
+        y_pred = table['y_predict'].tolist().copy()
+        overall = iids_util.evaluation_metrics(y_true=y_true, y_pred=y_pred)
+        overall.update({"runtime": runtime})
+        overall.update({"Instances_num": len(model_output)})
+        # add overall metrics
+        metric_dicts.update({"overall": overall})
+        # add metrics per models
+        for col in model_id:
+            y_pred = table[col].tolist().copy()
+            metrics = iids_util.evaluation_metrics(y_true=y_true, y_pred=y_pred)
+            metric_dicts.get("by-model").update({col: metrics})
+            del metrics, y_pred
+        # add agreement score between models
+        for x1,x2 in combinations(columns, r=2):
+            y1 = table[x1].tolist().copy()
+            y2 = table[x2].tolist().copy()
+            score = cohen_kappa_score(y1=y1, y2=y2)
+            metric_dicts.get('agreement').update({f"{x1}-{x2}": round(score,3)})
+        self.__metric_dicts = metric_dicts
+
+    def __reset_majority_class(self):
+        self.__class_counter = []
+
+    def __update_majority_class(self, y=None):
+        if y == None:
+            pass
+        else:
+            self.__class_counter.append(y)
+            if len(self.__class_counter) > self.window_size:
+                self.__class_counter = self.__class_counter[1:]
+        
+        return int(self.__class_counter.count(1) > self.__class_counter.count(0))
+
+    def __reset_evaluator(self):
+        self.__metric_dicts = {"overall": {},
+                               "by-model": {},
+                               "agreement": {}}
+        
+    def __ocl_anomaly(self):
+        print("run OCL Anomaly")
         instances_seen = 0
-        encoded_truth = []
-        # we assume that if model predict None, then it is considered as normal (majority class)
-        normal_as = self.encoding_rules.get(params.normal_l1label)
-        self.__stream.restart()
-        while self.__stream.has_more_instances():
-            curr_instance = self.__stream.next_instance()
-            # first, model to test the current instance
-            y_models = list(self.multi_predict(curr_instance))
-            y_predict = self.__voting_rules(npredicts=y_models, encoded_normal=normal_as, random_seed=self.random_seed)
-            # y_models = output models, final decision, y_true
-            output = y_models + [y_predict] + [curr_instance.y_index]
-            encoded_truth.append(output)
-            # then, model to train the current instance
-            self.multi_train(curr_instance)
-            instances_seen += 1
-            # delete temporary variable to ensure no repeated value
-            del y_models, y_predict, output
-            # print progress
-            if (instances_seen % 1000 == 0) or (self.__stream.has_more_instances() == False):
-                progress = instances_seen/self.__stream._len
-                msg = util.progress_meter(progress=progress) + f' ~ Instances seen: {instances_seen:,}'
-                print(f'>> {msg}', end='\r', flush=True)
-        
-        # metrics evaluation
-        self.__evaluator(model_output=encoded_truth,
-                         encoded_normal=normal_as)
+        err_instances = 0
+        model_output = []
+        self.Istream.restart()
+        self.__reset_majority_class()
+        start = time.time() # runtime start at the beginning of the test-then-train loops
+        while self.Istream.has_more_instances():
+            try:
+                curr_instance = self.Istream.next_instance()
+                # first, model to test the current instance
+                proba_score = list(self.__Iproba(curr_instance))
+                # replace NA with majority class if any
+                majority_class = self.__update_majority_class()
+                proba_score = iids_util.proba_rules(proba_score)
+                # proba_score = [majority_class if item == None else item for item in proba_score]
+                y_models = iids_util.proba_prediction_rules(nscore=proba_score,
+                                                            threshold=self.proba_threshold)
+                
+                y_predict = iids_util.voting_decision(npredicts=y_models)
+                # update majority class
+                self.__update_majority_class(y=y_predict)
+                # y_models = output models, final decision, y_true
+                output = y_models + [y_predict] + [curr_instance.y_index]
+                model_output.append(output.copy())
+                # then, model to train the current instance
+                self.__Itrain(curr_instance)
+                instances_seen += 1
+                # delete temporary variable to ensure no repeated value
+                del y_models, y_predict, output
+            except:
+                err_instances += 1
+                # print(curr_instance.x, end='\r' ,flush=True)
+
+            if (instances_seen % 1000 == 0) or (self.Istream.has_more_instances() == False):
+                progress = instances_seen/self.Istream._len
+                msg1 = util.progress_meter(progress=progress)
+                msg2 = f' ~ Instances seen: {instances_seen:,}. Error: {err_instances:,}'
+                print(f'>> {msg1} {msg2}', end='\r', flush=True)
+            runtime = round(time.time() - start, 2)
+        self.__evaluator(model_output=model_output,
+                         runtime=runtime)
+
+    def __ocl_supervised(self):
+        print("run OCL Supervised")
+        instances_seen = 0
+        err_instances = 0
+        model_output = []
+        self.Dstream.restart()
+        self.__reset_majority_class()
+        start = time.time() # runtime start at the beginning of the test-then-train loops
+        while self.Istream.has_more_instances():
+            try:
+                curr_instance = self.Istream.next_instance()
+                # first, model to test the current instance
+                dpredicts = list(self.__Dpredict(curr_instance))
+                # replace NA with zero if any
+                majority_class = self.__update_majority_class()
+                dpredicts = [majority_class if item == None else item for item in dpredicts]
+                y_models = iids_util.proba_prediction_rules(nscore=dpredicts,
+                                                            threshold=self.proba_threshold)
+                
+                y_predict = iids_util.voting_decision(npredicts=y_models)
+                
+                # update majority class
+                self.__update_majority_class(y=y_predict)
+                # y_models = output models, final decision, y_true
+                output = y_models + [y_predict] + [curr_instance.y_index]
+                model_output.append(output.copy())
+                # then, model to train the current instance
+                self.__Dtrain(curr_instance)
+                instances_seen += 1
+                # delete temporary variable to ensure no repeated value
+                del y_models, y_predict, output
+            except:
+                err_instances += 1
+                # print(curr_instance.x, end='\r' ,flush=True)
+
+            if (instances_seen % 1000 == 0) or (self.Istream.has_more_instances() == False):
+                progress = instances_seen/self.Istream._len
+                msg1 = util.progress_meter(progress=progress)
+                msg2 = f' ~ Instances seen: {instances_seen:,}. Error: {err_instances:,}'
+                print(f'>> {msg1} {msg2}', end='\r', flush=True)
+            runtime = round(time.time() - start, 2)
+        self.__evaluator(model_output=model_output,
+                         runtime=runtime)
+        pass
+
+    def __ocl_semi_supervised(self):
+        print("run OCL Semi Supervised")
+        instances_seen = 0
+        err_instances = 0
+        label_seen = 0
+        model_output = []
+        self.Dstream.restart()
+        self.Istream.restart()
+        self.__reset_majority_class()
+        start = time.time() # runtime start at the beginning of the test-then-train loops
+        while self.Istream.has_more_instances():
+            try:
+                curr_instance = self.Istream.next_instance()
+                majority_class = self.__update_majority_class()
+                # first, predict with InTimeLearner
+                proba_score = list(self.__Iproba(curr_instance))
+                # train with InTimeLearner
+                self.__Itrain(curr_instance)
+                instances_seen += 1
+                # check if delayed label exists.
+                # if delayed label not exist, run IIDS only with InTimeLearner
+                proba_score = iids_util.proba_rules(proba_score)
+                # proba_score = [max(proba_score) if item == None else item for item in proba_score]
+                y_Imodels = iids_util.proba_prediction_rules(nscore=proba_score,
+                                                            threshold=self.proba_threshold)
+                if instances_seen <= self.annot_delay:
+                    # Since DelayLearner is inactive,
+                    # assumed its output is identical with InTimeLearner
+                    y_Dmodels = y_Imodels
+                else:
+                    # DelayLearner adopts train-then-test techniques
+                    # First, proceed train
+                    D_instance = self.Dstream.next_instance()
+                    self.__Dtrain(D_instance)
+                    label_seen += 1
+                    # proceed predict
+                    y_Dmodels = self.__Dpredict(curr_instance)
+                    y_Dmodels = [majority_class if item == None else item for item in y_Dmodels]
+                    # Find similarity between current InTime instance and delay instance
+                    stream_similarity = cosine_similarity([curr_instance.x], [D_instance.x])[0][0]
+                    if stream_similarity > self.similarity_threshold:
+                        # if both stream highly similar,
+                        y_Imodels = y_Dmodels # discard prediction by InTimeLearner
+
+                # final prediction is only by InTimeLearner
+                y_models = y_Imodels + y_Dmodels
+                y_predict = iids_util.voting_decision(npredicts=y_models)
+                # Update majority class
+                self.__update_majority_class(y=y_predict)
+                # y_models = output models, final decision, y_true
+                output = y_models + [y_predict] + [curr_instance.y_index]
+                model_output.append(output.copy())
+                # delete temporary variable to ensure no repeated value
+                del y_models, y_predict, output
+            except:
+                err_instances += 1
+
+            if (instances_seen % 1000 == 0) or (self.Istream.has_more_instances() == False):
+                progress = instances_seen/self.Istream._len
+                msg1 = util.progress_meter(progress=progress)
+                msg2 = f' ~ Instances seen: {instances_seen:,}. Label seen: {label_seen:,}. Error: {err_instances:,}'
+                print(f'>> {msg1} {msg2}', end='\r', flush=True)
+            runtime = round(time.time() - start, 2)
+        self.__evaluator(model_output=model_output,
+                         runtime=runtime)
